@@ -1,7 +1,7 @@
 #ifndef ALLOCATOR_HPP_INCLUDED
 #define ALLOCATOR_HPP_INCLUDED
 #include<cstdlib>
-
+#include <typeinfo>
 /** \file
  *  \brief Header with class declaration
 
@@ -25,10 +25,9 @@
 */
 
 
-
+template <class Type> class IPointers;
 template <class Type> class SharedPtr;
-
-
+template <class Type> class IMemoryAllocator;
 
 struct Counter
 {
@@ -50,68 +49,72 @@ struct Counter
     }
 };
 
-template <class Type>
-class Visitor {
-    public:
 
-        virtual  Type* VisitSharedPointer(SharedPtr<Type>  * shared) = 0;
-        virtual ~Visitor() { }
-};
 
 
 template <class Type>
- class Pointers{
- public:
-    virtual void accept(Visitor<Type> * vis) = 0;
-
-};
-
-
-
-template <class Type> class SharedPtr: public Pointers<Type>
-{
-
-      Counter      *cr;
-      Type         *ptr_;
-      bool         isHeap;
+ class IPointers{
 protected:
-    void swap(SharedPtr & shp){
+    Type         *ptr_;
+    bool         isHeap;
+public:
+   IPointers(Type *ptr = NULL, bool isHeap = false)
+                :ptr_(ptr)
+                ,isHeap(isHeap){}
+
+   virtual ~IPointers(){ }
+   virtual void accept(const IMemoryAllocator<Type> *vis) const = 0;
+   virtual Type* get() const = 0;
+   virtual bool heap() const = 0;
+   virtual void reset(Type *ptr) = 0;
+   virtual bool operator!=(Type* pointer) const = 0;
+   template<typename T> operator T() { return (T)IPointers<Type>::ptr_; }
+   virtual bool operator==(Type* pointer) const = 0;
+   virtual Type operator[](size_t i)const = 0;
+   virtual Type& operator[](size_t i) = 0;
+   virtual Type operator*() const = 0;
+};
+
+template <class Type> class SharedPtr: public IPointers<Type>
+{
+      Counter      *cr;
+protected:
+    void swap( SharedPtr<Type> & shp){
 
         Counter * tmp = cr;
         cr = shp.cr;
         shp.cr = tmp;
-        Type * tmp_ptr_ = ptr_;
-        ptr_ = shp.ptr_;
+        Type * tmp_ptr_ = IPointers<Type>::ptr_;
+        IPointers<Type>::ptr_ = shp.ptr_;
         shp = tmp_ptr_;
 
      }
 
 public:
-
+     void accept(const IMemoryAllocator<Type> *vis) const{ vis->VisitSharedPointer(this);}
      explicit SharedPtr(Type *ptr = NULL, bool isHeap = 0)
-                                        :ptr_(ptr)
-                                        ,isHeap(isHeap){
+                                        :IPointers<Type>(ptr, isHeap){
 
            cr = new Counter();
            cr->Add();
 
      }
 
-    SharedPtr(const SharedPtr& ptr) {
+    SharedPtr(const SharedPtr<Type>& ptr) {
 
-        ptr_= ptr.get();
+        IPointers<Type>::ptr_ = ptr.get();
 
         ptr.cr->Add();
         cr = ptr.cr;
-        isHeap = ptr.heap();
+        IPointers<Type>::isHeap = ptr.heap();
 
     }
    ~SharedPtr(){
         if(cr->Clean()==0){
             delete cr;
 
-        if(isHeap)
-            delete ptr_;
+        if(IPointers<Type>::isHeap)
+            delete IPointers<Type>::ptr_;
         }
      }
 
@@ -125,61 +128,55 @@ public:
 
 
    bool operator!=(Type* pointer) const {
-            return ptr_ != pointer;
+            return IPointers<Type>::ptr_ != pointer;
     }
 
-   bool operator==(Type* pointer) const {
-            return ptr_ == pointer;
-    }
-
-   void operator=(Type* pointer) {
-             ptr_ = pointer;
-    }
-  Type operator*()const{return *ptr_;}
-
-   Type operator[](size_t i)const{return *(ptr_+ i);}
-
-   Type& operator[](size_t i){
-       return *(ptr_+ i);
-       }
-
-    template<typename T>
-    operator T() {
+   bool operator==(Type* pointer) const {return IPointers<Type>::ptr_ == pointer;}
+   void operator=(Type* pointer) {IPointers<Type>::ptr_ = pointer;}
+   Type operator*()const{return *IPointers<Type>::ptr_;}
+   Type operator[](size_t i)const{return *(IPointers<Type>::ptr_+ i);}
+   Type& operator[](size_t i){ return *(IPointers<Type>::ptr_+ i);}
 
 
-        return (T)ptr_; }
 
+    Type* operator->(){ return IPointers<Type>::ptr_;}
 
-     Type* get()const{
-        return ptr_;
-     }
+     Type* get()const{ return IPointers<Type>::ptr_;}
+
      void reset(Type *ptr = NULL){
-            if(!cr->Clean())
-                delete ptr_;
+            if(!cr->Clean() && IPointers<Type>::isHeap)
+                delete IPointers<Type>::ptr_;
 
-            ptr_ = ptr;
+            IPointers<Type>::ptr_ = ptr;
             cr->Add();
 
      }
-   //  Type& operator*() const{
-    //    return *ptr_;
-    // }
-     Type* operator->(){
-        return ptr_;
-     }
+
      bool heap()const{
-        return isHeap;
+        return IPointers<Type>::isHeap;
      }
-     void accept(Visitor<Type> *vis){ vis->VisitSharedPointer(this);}
+
 };
 
 
-   template <class FirstType, class SecondType> bool operator==(FirstType val, SharedPtr<SecondType> ptr) {
+   template <class FirstType, class SecondType> bool operator==(FirstType val, IPointers<SecondType>& ptr) {
             return val == *ptr;
     }
 
+
 template <class Type>
-    class SmartAllocator: public Visitor<Type> {
+class  IMemoryAllocator{/**< visitor */
+    public:
+        virtual Type* VisitSharedPointer( const IPointers<Type>* shared) const = 0;
+        virtual SharedPtr<Type>  Alloc(size_t Size) = 0;
+        virtual SharedPtr<Type> ReAlloc(IPointers<Type>& pointer, size_t size) = 0;
+        virtual void Free(IPointers<Type>& Pointer) = 0;
+        virtual ~IMemoryAllocator(){}
+};
+
+
+template <class Type>
+    class PoolAllocator: public IMemoryAllocator<Type> {
 
 private:
 
@@ -194,13 +191,19 @@ private:
 
     unsigned segments;
 
+    PoolAllocator(Type *block, size_t bytes);
+
 protected:
     size_t bytes(Type *pointer);
 
 public:
-  Type* VisitSharedPointer(SharedPtr<Type> * shared){
-       return *shared;
-    }
+
+  static PoolAllocator& CreateInstance(Type *block, size_t bytes){
+        static PoolAllocator allocator(block, bytes);
+        return allocator;
+  }
+
+  Type* VisitSharedPointer( const IPointers<Type>* shared) const { return shared->get(); }
 
     /*!
     Initializes Smart Allocator by a linked list
@@ -211,12 +214,12 @@ public:
    \code
 
     int A[848576];
-    SmartAllocator A2(&A, 848576);
+    PoolAllocator A2(&A, 848576);
 
    \endcode
     */
 
-        SmartAllocator(Type *block, size_t bytes);
+
 
     /*!
     Allocates the first available units in the pool.
@@ -234,7 +237,7 @@ public:
     \param[in] size the size of the requested memory
     */
 
-     SharedPtr<Type> ReAlloc(SharedPtr<Type>& pointer, size_t size) ;
+     SharedPtr<Type> ReAlloc(IPointers<Type>& pointer, size_t size) ;
 
     /*!
     Frees the units in the pool until it reaches
@@ -242,26 +245,28 @@ public:
     \param[in] pointer memory to be freed
     */
 /*! @} */
-        void Free(SharedPtr<Type>& Pointer);
+        void Free(IPointers<Type>& Pointer);
 
-        virtual ~SmartAllocator();
+        virtual ~PoolAllocator(){}
 
 
 
 };
 
-template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t bytes)
+template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t elements)
                             :memory((char*)block)
-                            ,size(bytes)
+                            ,size(elements*sizeof(Type))
                             ,segments(size
                                   /sizeof(Pool))// количество кусков по 8 байт
                         {
-
+     //   std::cout<<"Сегментов было = "<<segments<<std::endl;
+        //    std::cout<<"ТИП: "<<sizeof(Type) <<" байт"<<std::endl;
             Pool p;// объявляем структуру и инициализируем конструктором по-умолчанию
+       //     std::cout<<"Pool p= "<<sizeof(p) <<" байт"<<std::endl;
             *((Pool*)(memory+segments*sizeof(Pool)-sizeof(Pool))) = p;// записываем первую структуру в память  со смещением
             PoolHead = (Pool*)(memory+segments*sizeof(Pool)-sizeof(Pool));// созраняем ссылку на голову списка. пока только 1 элемент
 
-            for(size_t i = segments*sizeof(Pool)-sizeof(Pool)*2; i > 0; i -= sizeof(Pool))
+            for(size_t i = segments*sizeof(Pool)-sizeof(Pool); i > 0; i -= sizeof(Pool))
             {
                 *((Pool*)(memory+i)) = p;// записываем следующую структуру в память со смещением
                 ((Pool*)(memory+i))->next = PoolHead;// передаем ссылку на предыдущий блок
@@ -270,15 +275,15 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
 
         }
 
-  template<class Type>  SmartAllocator<Type>::~SmartAllocator(){}
+  //template<class Type>  PoolAllocator<Type>::~PoolAllocator(){}
 
 
 
-  template<class Type>  SharedPtr<Type>  SmartAllocator<Type>::Alloc(size_t Size) {
+  template<class Type>  SharedPtr<Type>  PoolAllocator<Type>::Alloc(size_t Size) {
 
 
             SharedPtr<Type> ptr;
-
+            std::cout<<"Размер SharedPtr<Type> ptr:"<<sizeof(ptr)<<std::endl;
             if( segments*sizeof(Pool) >= Size  &&  Size != 0  ){
 
 
@@ -291,6 +296,7 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
                 // сделаем еще две ссылки и прогоним в поисках идущих подряд незанятых блоков
                 Pool *ptr_first = PoolHead;
                 Pool *ptr_second = PoolHead;
+             //   std::cout<<"ptr_first->next = " << ptr_first->next << std::endl;
                 int counter = 0, gen_counter = 0;
 
                 // количество скачков через уже выделенную память
@@ -298,7 +304,6 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
 
                 while(counter < real_size && ptr_first) //ищем верхнюю границу памяти
                 {
-
                     if(ptr_first->next - ptr_first == 1)// проверка на наличие выделенных участков между блоками
                         ++counter;
 
@@ -348,7 +353,7 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
             return ptr;
      }
 
-      template<class Type> size_t SmartAllocator<Type>::bytes(Type * Pointer){
+      template<class Type> size_t PoolAllocator<Type>::bytes(Type * Pointer){
 
             size_t i = 0;
 
@@ -359,7 +364,8 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
         }
 
     template<class Type>
-     SharedPtr<Type>  SmartAllocator<Type>::ReAlloc(SharedPtr<Type>& pointer, size_t size) {
+     SharedPtr<Type>  PoolAllocator<Type>::ReAlloc(IPointers<Type>& pointer, size_t size) {
+            SharedPtr<Type> ptr;
             if(pointer == NULL)
                 return Alloc(size);
             else
@@ -368,18 +374,19 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
             else{
 
                 size_t oldSize = bytes(pointer.get());
-                SharedPtr<Type> ptr = Alloc(size);
+                 ptr = Alloc(size);
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 for(size_t i = 0; i < size && i < oldSize; ++i)
                     ((char*)ptr)[i] = ((char*)pointer)[i];
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 Free(pointer);
+                }
                 return ptr;
 
-            }
+
         }
 
-     template<class Type> void SmartAllocator<Type>::Free(SharedPtr<Type>& Pointer) {
+    template<class Type> void PoolAllocator<Type>::Free(IPointers<Type>& Pointer) {
             // оствобождает всю память от Pointer и до первого незахваченного куска
             if(Pointer!=NULL){
                 Pool* ptr = (Pool*)Pointer;// приводим указатель начало сегмента памяти к типу юнитов
@@ -410,12 +417,13 @@ template<class Type>  SmartAllocator<Type> ::SmartAllocator(Type *block, size_t 
                         ptr_end = ptr;
                         ++ptr;
                         ptr_end->next = ptr;
-
-
+                        ++segments;
 
                     }
-
+                 //   std::cout<<"Сегментов стало = "<<segments<<std::endl;
+                //     Pointer.reset(NULL);
                 }
+
             }
 
         }
