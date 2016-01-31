@@ -43,15 +43,15 @@ public:
                 ,isHeap(isHeap){}
 
    virtual ~IPointers(){ }
-   virtual void accept(const IMemoryAllocator<Type> *vis) const = 0;
+
    virtual Type* get(size_t i) const = 0;
    virtual bool heap() const = 0;
    virtual void reset(Type *ptr = NULL) = 0;
 
-    bool operator!=(Type* pointer) const {   return this->ptr_ != pointer;}
-    bool operator==(Type* pointer) const {   return this->ptr_ == pointer;}
+   virtual bool operator!=(Type* pointer) const = 0;//{   return this->ptr_ != pointer;}
+   virtual bool operator==(Type* pointer) const = 0;//{   return this->ptr_ == pointer;}
 
-   Type& operator[](uint8_t i){ return this->ptr_[i];}
+   virtual Type& operator[](uint8_t i) = 0;//{ return this->ptr_[i];}
    virtual Type operator*() const = 0;
 
    template<typename T> operator T() { return (T)IPointers<Type>::ptr_; }
@@ -91,8 +91,9 @@ protected:
 
     int getCounter()const{ return cr;}
     void setCounter(int NewCr){ cr = NewCr; }
+
 public:
-     void accept(const IMemoryAllocator<Type> *vis) const{ /* вызываем функцию, обнуляющую пойнтер*/}
+
 
      explicit SharedPtr(Type *ptr = NULL, bool isHeap = 0)
                                         :IPointers<Type>(ptr, isHeap)
@@ -120,9 +121,9 @@ public:
      }
 
 
-   // bool operator!=(Type* pointer) const {   return this->ptr_ != pointer;}
-   // bool operator==(Type* pointer) const {   return this->ptr_ == pointer;}
-
+    bool operator!=(Type* pointer) const {   return this->ptr_ != pointer;}
+    bool operator==(Type* pointer) const {   return this->ptr_ == pointer;}
+    virtual Type& operator[](uint8_t i){ return this->ptr_[i];}
     SharedPtr<Type>& operator=(const SharedPtr<Type>& ptr){
 
         if(this != &ptr)
@@ -164,7 +165,7 @@ public:
 template <class Type>
 class  IMemoryAllocator{/**< visitor */
     public:
-        virtual void SetSharedPointer( const IPointers<Type>* shared) const = 0;
+
         virtual SharedPtr<Type>&  Alloc(size_t Size) = 0;
         virtual SharedPtr<Type>& ReAlloc(IPointers<Type>& pointer, size_t size) = 0;
         virtual void Free(IPointers<Type>& Pointer) = 0;
@@ -201,7 +202,7 @@ public:
         return allocator;
   }
 
-  void SetSharedPointer( const IPointers<Type>* shared) const { return shared->accept(this); }
+
 
     /*!
     Initializes Smart Allocator by a linked list
