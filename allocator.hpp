@@ -3,6 +3,8 @@
 #include<cstdlib>
 #include <typeinfo>
 #include<stdint.h>
+#include<algorithm>
+#include<cstring>
 /** \file
  *  \brief Header with class declaration
 
@@ -62,21 +64,17 @@ public:
 
 template <class Type> class SharedPtr: public IPointers<Type>
 {
-     // Counter      *cr;
+       using IPointers<Type>::ptr_;
+       using IPointers<Type>::isHeap;
        uint8_t  cr;
       /**< возвращает указатель на ячейку под объект умного указателя в памяти  */
 
 protected:
-    void swap( SharedPtr<Type> & shp){
+   void swap( SharedPtr<Type> & shp){
 
-        //Counter * tmp = cr;
-        uint8_t tmp = cr;
-        cr = shp.cr;
-        shp.cr = tmp;
-        Type * tmp_ptr_ = this->ptr_;
-        this->ptr_ = shp.ptr_;
-        shp = tmp_ptr_;
-
+        std::swap(this->ptr_, shp.ptr_);
+        std::swap(this->isHeap, shp.isHeap);
+        std::swap(this->cr, shp.cr);
      }
 
     void PlusPointer()
@@ -98,21 +96,19 @@ public:
      explicit SharedPtr(Type *ptr = NULL, bool isHeap = 0)
                                         :IPointers<Type>(ptr, isHeap)
                                         ,cr (1){
-
-
-
             PlusPointer();
      }
 
-    SharedPtr(const SharedPtr<Type>& ptr) {
+  /*  SharedPtr(const SharedPtr<Type>& ptr) {
 
         this->ptr_ = ptr.ptr_;
 
         const_cast<SharedPtr<Type>&>(ptr).PlusPointer();
+
         cr = ptr.getCounter();
         this->isHeap = ptr.isHeap;
 
-    }
+    }*/
    ~SharedPtr(){
         if((--cr)==0 && this->isHeap){
 
@@ -123,7 +119,7 @@ public:
 
     bool operator!=(Type* pointer) const {   return this->ptr_ != pointer;}
     bool operator==(Type* pointer) const {   return this->ptr_ == pointer;}
-    virtual Type& operator[](uint8_t i){ return this->ptr_[i];}
+    Type& operator[](uint8_t i){ return ptr_[i];}
     SharedPtr<Type>& operator=(const SharedPtr<Type>& ptr){
 
         if(this != &ptr)
@@ -139,7 +135,7 @@ public:
 
     Type* operator->(){ return this->ptr_;}
 
-     Type* get(size_t i = 0)const{return this->ptr_ + i;}
+     Type* get(size_t i)const{return this->ptr_ + i;}
 
      void reset(Type *ptr = NULL){
             if(!(--cr) && this->isHeap)
@@ -183,12 +179,16 @@ private:
         Pool *next;
     };
 
-    Pool *PoolHead;
-    char *memory;
+    Pool      *PoolHead;
+    char      *memory;
+
     size_t size; // in bytes
     unsigned segments;
     unsigned pointerCounter;
-    SharedPtr<Type>& IncreasePointerVector();
+
+    SharedPtr<Type>* queueHead;
+
+    void IncreasePointerVector();
 
     PoolAllocator(Type *block, size_t bytes);
     PoolAllocator(PoolAllocator<Type>&);
@@ -256,21 +256,22 @@ public:
 
 template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t elements)
                             :memory((char*)block)
+
                             ,size(elements*sizeof(Type))
                             ,segments(size
                                   /sizeof(Pool))// количество кусков по 8 байт
                             ,pointerCounter(0)
+                            ,queueHead( (SharedPtr<Type>*)(memory + size - 1) )
                         {
 
             Pool * PoolSecond = NULL;
-
+            Pool poolObject;
             for(size_t i = 0 ; i < segments; ++i)
             {
                 PoolHead    = (Pool*)memory + i + 1;
                 PoolSecond  = (Pool*)memory + i;
-                *PoolSecond = Pool();
+                memmove(PoolSecond, &poolObject, sizeof(poolObject));
                 PoolSecond->next = PoolHead;
-              //  std::cout<<i<<std::endl;
             }
 
             PoolHead = (Pool*)memory;
@@ -283,9 +284,9 @@ template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t el
 
   template<class Type>  SharedPtr<Type>&  PoolAllocator<Type>::Alloc(size_t Size) {
 
-            SharedPtr<Type>& pv = IncreasePointerVector();//link to the top element
-            //SharedPtr<Type> ptr;
-            pv = NULL;
+
+            IncreasePointerVector();
+
             if( segments*sizeof(Pool) >= Size  &&  Size != 0  ){
                // SharedPtr<Type> ptr;
 
@@ -334,7 +335,7 @@ template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t el
 
                         for(int i = 0; i <= gen_counter-counter - 1; ++i)
                             ptr_second = ptr_second->next;//run until the block before the first block
-                        pv = (Type *)(ptr_second->next->next);//отдали первый блок
+                        queueHead[0] = (Type *)(ptr_second->next->next);//отдали первый блок
                         ptr_second->next = ptr_first->next;//copy the one's after last block address to the "next" field.
 
                     }else{
@@ -342,7 +343,7 @@ template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t el
                         // память пока не сегментирована или
                         //выделяется один блок(может состоять из нескольких юнитов) в самом начале цепочки юнитов*/
                        // (*((double*)ptr_second) = size;
-                        pv = (Type *)ptr_second; // отдаем указатель на первый блок
+                        queueHead[0] = (Type *)ptr_second; // отдаем указатель на первый блок
                         PoolHead = ptr_first; //назначаем головй списка следующий юнит за выделенным блоком
                     }
 
@@ -355,21 +356,24 @@ template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t el
 
           }
 
-             return  pv;
+             return  queueHead[0];
 
      }
 
 
-template<class Type> SharedPtr<Type>&  PoolAllocator<Type>::IncreasePointerVector(){
-     ++pointerCounter;
-   //  std::cout<<"size = "<<size<<std::endl;
+template<class Type> void  PoolAllocator<Type>::IncreasePointerVector(){
 
-    /**< Инициализирует новый последний блок в пуле.*/
-     char* top = (memory + size - sizeof(SharedPtr<Type>)*pointerCounter);
-     Pool* end =((Pool *) top) - 1; //<---проблема
+    SharedPtr<Type> tmp;
+    queueHead =(SharedPtr<Type>*)( (char*)queueHead - int(sizeof(tmp)*1.5));
+
+    memmove(queueHead, &tmp, 24);
+    ++pointerCounter;
+
+     Pool* end = ((Pool *) queueHead) - 1;
      end->next = NULL;
-     segments -= sizeof(SharedPtr<Type>)/sizeof(Pool);
-     return *((SharedPtr<Type>*)top);
+
+     segments -= sizeof(queueHead[0])/sizeof(Pool);
+
 
 }
 
@@ -395,6 +399,7 @@ template<class Type> SharedPtr<Type>&  PoolAllocator<Type>::IncreasePointerVecto
                     Free(pointer);
                     return *(SharedPtr<Type>*)(memory + size);
                 }
+
 
 
                 size_t oldSize = bytes(&pointer[0]);

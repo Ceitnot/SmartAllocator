@@ -12,7 +12,7 @@ TEST(Alloc_2_mems_float){
     IMemoryAllocator<float>& A2 = PoolAllocator<float>::CreateInstance(A, SIZE);
     SharedPtr<float>& A2_P1 = A2.Alloc(10 * sizeof(float));
 
-
+    A2_P1.get(0);
 
     for(size_t  i = 0; i < 10; i++)
      {
