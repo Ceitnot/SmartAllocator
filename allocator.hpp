@@ -1,178 +1,243 @@
+
+/** \file
+ *  \brief
+ \copyright Copyright 2016 Kashtanova Anna Viktorovna
+ Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 #ifndef ALLOCATOR_HPP_INCLUDED
 #define ALLOCATOR_HPP_INCLUDED
 #include<cstdlib>
-#include <typeinfo>
 #include<stdint.h>
 #include<algorithm>
 #include<cstring>
-/** \file
- *  \brief Header with class declaration
+#include<iostream>
 
+/** \brief This allocator supports two ways to manage memory allocation:
+                1. PoolAllocator. It allows required number of bytes selection.
+                2. SmartAllocator. Faster then the first one. One can select required number of elements.
 
-*/
-
-/** \brief The allocator class supports a more efficient memory management.
-    Supports a dynamic memory pool in order to map limited memory block;
     \authors Kashtanova Anna Viktorovna
-    \version 0.1
-    \date 12.01.2016
-    \warning here is no defragmentation module. Status: in the pipeline.
-    \todo Needed to add memory compaction
+    \version 1.0
+    \date 23.02.2016
  */
 
-
-/**
-    \defgroup smart_allocator Memory allocator
-    \brief Efficient memory management
-    @{
-*/
-
-
 template <class Type> class IPointers;
-template <class Type> class SharedPtr;
+template <class Type> class DataPointer;
 template <class Type> class IMemoryAllocator;
 
+template<class Type> IPointers<Type> * const findAddr(IPointers<Type> * const dataPointer,  const Type* const  ptr, unsigned number){
+    IPointers<Type> *tmp = dataPointer;
+    for(int i = 0; i < number; ++i){
+       if(*tmp == ptr)
+            return tmp;
+       tmp = dataPointer + 1;
+    }
+    return NULL;
+}
 
+template<class Type> void  SortPointers(IPointers<Type> ** const sorted, unsigned len){
 
+    if (len < 2) return;
+
+    unsigned  mid =  len/2;
+    IPointers<Type> *left[mid];
+    IPointers<Type> *right[len - mid];
+
+    for (int i = 0; i < mid; ++i)
+        left[i] = sorted[i];
+    for (int j = mid; j < len; ++j)
+        right[j - mid] = sorted[j];
+
+    SortPointers(left, mid);
+    SortPointers(right, len - mid);
+    MergePointers(sorted, left, mid, right, len - mid);
+}
+template<class Type> void  MergePointers(IPointers<Type>** const sorted
+                                        , IPointers<Type>** const left
+                                        , unsigned sizeL
+                                        , IPointers<Type> ** const right
+                                        , unsigned sizeR){
+    unsigned i = 0, j = 0, k = 0;
+
+    while(i < sizeL && j < sizeR )
+    {
+        if(left[i]->get() <= right[j]->get())
+        {
+            sorted[k] = left[i];
+             ++i;
+        }
+        else
+        {
+            sorted[k] = right[j];
+             ++j;
+        }
+        ++k;
+    }
+    while(i < sizeL)
+    {
+        sorted[k] = left[i];
+        ++i; ++k;
+    }
+    while(j < sizeR)
+    {
+        sorted[k] = right[j];
+        ++j; ++k;
+    }
+}
+/**
+    \defgroup pointers Smart Pointers
+    \brief
+    @{
+*/
 template <class Type>
  class IPointers{
+private:
+    IPointers(const IPointers<Type>&);
 protected:
-    Type         *ptr_;
+    mutable size_t _size;
+    mutable Type  *ptr_;
     bool         isHeap;
-public:
-   IPointers(Type *ptr = NULL, bool Heap = 0)
-                :ptr_(ptr)
-                ,isHeap(isHeap){}
 
+ IPointers(size_t _size = 0, Type *ptr = NULL, bool Heap = 0)
+                        :ptr_(ptr)
+                        ,_size(_size)
+                        ,isHeap(Heap)
+
+    {}
+public:
    virtual ~IPointers(){ }
 
-   virtual Type* get(size_t i) const = 0;
+   virtual const Type* get() const = 0;
+   virtual size_t size() const = 0;
    virtual bool heap() const = 0;
-   virtual void reset(Type *ptr = NULL) = 0;
+   virtual void reset(Type *ptr = NULL, size_t newSize = 0) = 0;
 
-   virtual bool operator!=(Type* pointer) const = 0;//{   return this->ptr_ != pointer;}
-   virtual bool operator==(Type* pointer) const = 0;//{   return this->ptr_ == pointer;}
+   virtual bool operator!=(const Type* const pointer) const = 0;//{   return this->ptr_ != pointer;}
+   virtual bool operator==(const Type* const pointer) const = 0;//{   return this->ptr_ == pointer;}
 
-   virtual Type& operator[](uint8_t i) = 0;//{ return this->ptr_[i];}
+   virtual Type& operator[](size_t i) = 0;//{ return this->ptr_[i];}
    virtual Type operator*() const = 0;
 
-   template<typename T> operator T() { return (T)IPointers<Type>::ptr_; }
+   virtual void accept(const IMemoryAllocator<Type> * visitor
+                       , const Type* newPtr
+                       , const size_t& newSize) const = 0;
+   template<typename T> operator T() { return (const T)IPointers<Type>::ptr_; }
 
 };
 
 
 
-template <class Type> class SharedPtr: public IPointers<Type>
+template <class Type> class DataPointer: public IPointers<Type>
 {
        using IPointers<Type>::ptr_;
        using IPointers<Type>::isHeap;
-       uint8_t  cr;
-      /**< возвращает указатель на ячейку под объект умного указателя в памяти  */
+       using IPointers<Type>::_size;
 
+       DataPointer(DataPointer<Type>&);
 protected:
-   void swap( SharedPtr<Type> & shp){
 
+/**< auxiliary function */
+   void swap( DataPointer<Type> & shp){
         std::swap(this->ptr_, shp.ptr_);
         std::swap(this->isHeap, shp.isHeap);
-        std::swap(this->cr, shp.cr);
+        std::swap(this->_size, shp._size);
      }
-
-    void PlusPointer()
-    {
-        ++cr;
-    }
-
-    int Clean()
-    {
-        return --cr;
-    }
-
-    int getCounter()const{ return cr;}
-    void setCounter(int NewCr){ cr = NewCr; }
 
 public:
+     explicit DataPointer(size_t size = 0, Type *ptr = NULL, bool isHeap = false)
+                                        : IPointers<Type>(size, ptr, isHeap)
 
+            { }
 
-     explicit SharedPtr(Type *ptr = NULL, bool isHeap = 0)
-                                        :IPointers<Type>(ptr, isHeap)
-                                        ,cr (1){
-            PlusPointer();
-     }
-
-  /*  SharedPtr(const SharedPtr<Type>& ptr) {
-
-        this->ptr_ = ptr.ptr_;
-
-        const_cast<SharedPtr<Type>&>(ptr).PlusPointer();
-
-        cr = ptr.getCounter();
-        this->isHeap = ptr.isHeap;
-
-    }*/
-   ~SharedPtr(){
-        if((--cr)==0 && this->isHeap){
-
+   ~DataPointer(){
+        if(this->isHeap){
             delete this->ptr_;
         }
      }
 
-
-    bool operator!=(Type* pointer) const {   return this->ptr_ != pointer;}
-    bool operator==(Type* pointer) const {   return this->ptr_ == pointer;}
-    Type& operator[](uint8_t i){ return ptr_[i];}
-    SharedPtr<Type>& operator=(const SharedPtr<Type>& ptr){
+    bool operator!=(const Type* const pointer) const {   return this->ptr_ != pointer;}
+    bool operator==(const Type* const pointer) const {   return this->ptr_ == pointer;}
+    Type& operator[](size_t i){
+        if(i < this->_size)
+            return ptr_[i];
+        else
+            return ptr_[i - _size];
+        }
+    DataPointer<Type>& operator=(const DataPointer<Type>& ptr){
 
         if(this != &ptr)
-            SharedPtr(ptr).swap(*this);
-
+            DataPointer(ptr).swap(*this);
         return *this;
     }
 
-   void operator=(Type* pointer) { this->ptr_ = pointer;}
-
    Type operator*()const{return *(this->ptr_);}
 
+   const  Type* get()const{return this->ptr_;}
 
-    Type* operator->(){ return this->ptr_;}
+   size_t size() const {return this->_size;}
 
-     Type* get(size_t i)const{return this->ptr_ + i;}
-
-     void reset(Type *ptr = NULL){
-            if(!(--cr) && this->isHeap)
+   void reset(Type *ptr = NULL, size_t newSize = 0){
+            if(this->isHeap)
                 delete this->ptr_;
-
             this->ptr_ = ptr;
-            ++cr;
-
+            _size = newSize;
      }
 
      bool heap()const{
         return this->isHeap;
      }
-
+void accept(const IMemoryAllocator<Type> * visitor, const Type* newPtr, const size_t& newSize)const;
 };
+/** \brief Provides access to the object of DataPointer by Visitor pattern in order to change pointer
+ * \param visitor - a reference to the allocator - object
+ * \param newPtr  - pointer replaces old pointer
+ * \return void
+ */
 
 
-   template <class FirstType, class SecondType> bool operator==(FirstType val, IPointers<SecondType>& ptr) {
-            return val == *ptr;
-    }
+template<class Type>
+     void DataPointer<Type>::accept(const IMemoryAllocator<Type> * visitor, const Type* newPtr, const size_t& newSize)const{
+      visitor->set( ptr_, newPtr);
+      visitor->setSize(_size, newSize);
+      }
+/*! @} */
+/**
+    \defgroup allocator Memory allocator
+    \brief
+    @{
+*/
 
-
+/**
+    \defgroup interfaces Interfaces
+    \ingroup allocator
+    @{
+*/
 template <class Type>
 class  IMemoryAllocator{/**< visitor */
-    public:
-
-        virtual SharedPtr<Type>&  Alloc(size_t Size) = 0;
-        virtual SharedPtr<Type>& ReAlloc(IPointers<Type>& pointer, size_t size) = 0;
-        virtual void Free(IPointers<Type>& Pointer) = 0;
+public:
+        virtual IPointers<Type>&  alloc(size_t _size) = 0;
+        virtual void realloc(IPointers<Type>& pointer, size_t _size) = 0;
+        virtual void free(IPointers<Type>& pointer) = 0;
         virtual ~IMemoryAllocator(){}
-        virtual bool Defragmentation() const = 0;
-        virtual int checkMemory() const = 0;
+        virtual void defragmentation() = 0;
+        virtual void set(Type*& oldPtr, const Type*& newPtr) const = 0;
+        virtual void setSize(size_t& oldSize,const size_t& newSize) const = 0;
 };
+/*! @} */
 
-
-template <class Type>
-    class PoolAllocator: public IMemoryAllocator<Type> {
+template <class PointerType, class MemoryType>
+    class PoolAllocator: public IMemoryAllocator<PointerType> {
 
 private:
 
@@ -184,27 +249,22 @@ private:
     Pool      *PoolHead;
     char      *memory;
 
-    size_t size; // in bytes
-    unsigned segments;
+    size_t size;
+    int segments;
     unsigned pointerCounter;
+    DataPointer<PointerType>* queueHead;
+    void createDataPointer();
 
-    SharedPtr<Type>* queueHead;
 
-    bool IncreasePointerVector();
-    size_t offset();
-
-    PoolAllocator(PoolAllocator<Type>&);
+    PoolAllocator(PoolAllocator<PointerType, MemoryType>&);
+    PoolAllocator<PointerType, MemoryType>& operator = (const PoolAllocator<PointerType, MemoryType>&);
 protected:
-    size_t bytes(Type *pointer);
-
+    size_t bytes(IPointers<PointerType>& pointer);
 public:
-PoolAllocator(Type *block, size_t bytes);
-// static  PoolAllocator& CreateInstance(Type *block, size_t bytes){
-//        static PoolAllocator allocator(block, bytes);
-//        return allocator;
-//  }
 
-
+    void set(PointerType*& oldPtr,const PointerType*& newPtr) const;
+    void setSize(size_t& oldSize, const size_t& newSize) const ;
+    PoolAllocator(MemoryType *block, size_t elements);
 
     /*!
     Initializes Smart Allocator by a linked list
@@ -221,13 +281,12 @@ PoolAllocator(Type *block, size_t bytes);
     */
 
 
-
     /*!
     Allocates the first available units in the pool.
     \param[in] size the size of the requested memory
     */
 
-        SharedPtr<Type>&  Alloc(size_t Size);
+        IPointers<PointerType>&  alloc(size_t Size);
 
     /*!
     Reallocates the first available units in the pool with new size.
@@ -238,251 +297,229 @@ PoolAllocator(Type *block, size_t bytes);
     \param[in] size the size of the requested memory
     */
 
-     SharedPtr<Type>& ReAlloc(IPointers<Type>& pointer, size_t size) ;
+      void realloc(IPointers<PointerType>& pointer, size_t size) ;
 
     /*!
     Frees the units in the pool until it reaches
      another allocated block or unallocated memory.
     \param[in] pointer memory to be freed
     */
-/*! @} */
-        void Free(IPointers<Type>& Pointer);
-        bool Defragmentation() const;
-        virtual ~PoolAllocator(){}
+
+       void free(IPointers<PointerType>& Pointer);
+       void defragmentation();
+       virtual ~PoolAllocator(){}
 
     int checkMemory()const{
-
         int counter = 0;
-
         Pool *first = PoolHead;
-
         while(first){
-
         ++counter;
         first = first->next;
-
         }
-        std::cout<<"counter = "<<counter<<std::endl;
         return (counter)*sizeof(Pool);
     }
 };
-
-
-
-template<class Type>  PoolAllocator<Type> ::PoolAllocator(Type *block, size_t elements)
-                            :memory((char*)block)
-
-                            ,size(elements*sizeof(Type))
-                            ,segments(size
-                                  /sizeof(Pool))// количество кусков по 8 байт
-                            ,pointerCounter(0)
-                            ,queueHead( (SharedPtr<Type>*)(memory + size) )
+/*! @} */
+template <class PointerType, class MemoryType>  PoolAllocator<PointerType, MemoryType>::PoolAllocator(MemoryType *block, size_t elements)
+                            :memory(reinterpret_cast<char*>(block))
+                            ,size(elements*sizeof(MemoryType))
+                            ,segments(size/sizeof(Pool)
+                                      - sizeof(DataPointer<PointerType>)/sizeof(Pool))// количество кусков по 8 байт
+                            ,pointerCounter(1)
                         {
-std::cout<< "PoolAllocator(Type *block, size_t elements) "<<std::endl;
             Pool * PoolSecond = NULL;
             Pool PoolObject;
-            for(size_t i = 0 ; i < segments; ++i)
+            for(size_t i = 0 ; i < segments ; ++i)
             {
-                PoolHead    = (Pool*)memory + i + 1;
-                PoolSecond  = (Pool*)memory + i;
+                PoolHead    = reinterpret_cast<Pool*>(memory) + i + 1;
+                PoolSecond  = reinterpret_cast<Pool*>(memory) + i;
                 memmove(PoolSecond, &PoolObject, sizeof(PoolObject));
                 PoolSecond->next = PoolHead;
             }
             PoolHead = (Pool*)memory;
+            DataPointer<PointerType> SharedObject;
+            memmove(PoolSecond->next, &SharedObject, sizeof(SharedObject));
+            queueHead = reinterpret_cast< DataPointer<PointerType>* >(PoolSecond->next);
             PoolSecond->next = NULL;
-  std::cout<< "Памяти осталось "<<this->checkMemory()<<" байт. "<<std::endl;
         }
 
-  //template<class Type>  PoolAllocator<Type>::~PoolAllocator(){}
 
-template<class Type> size_t  PoolAllocator<Type>::offset(){
-
-    return 0;
-
+template<class PointerType, class MemoryType> void  PoolAllocator<PointerType, MemoryType>::set(PointerType*& oldPtr
+                                                                                    ,const PointerType*& newPtr)const
+{
+    oldPtr = const_cast<PointerType*>(newPtr);
+}
+template<class PointerType, class MemoryType> void  PoolAllocator<PointerType, MemoryType>::setSize(size_t& oldSize
+                                                                                                    , const size_t& newSize)const
+{
+    oldSize = newSize;
 }
 
-  template<class Type>  SharedPtr<Type>&  PoolAllocator<Type>::Alloc(size_t Size) {
-    std::cout<< "Alloc() "<<std::endl;
-    std::cout<< "Памяти осталось start"<<this->checkMemory()<<" байт. "<<std::endl;
-            IncreasePointerVector();
+template<class PointerType, class MemoryType>  IPointers<PointerType>&  PoolAllocator<PointerType, MemoryType>::alloc(size_t Size) {
 
-                size_t real_size = 0; // вычислим реальное число блоков с учетом размера каждой структуры в 8 байт
-                real_size =  (Size%sizeof(Pool)) ?  Size/sizeof(Pool) + 2 : Size/sizeof(Pool) + 1;
+            size_t realSize = (Size%sizeof(Pool)) ?  Size/sizeof(Pool) + 1 : Size/sizeof(Pool) ;
+            IPointers<PointerType>* top = queueHead;
+            IPointers<PointerType>* vacant = findAddr(queueHead, reinterpret_cast<PointerType*>(NULL), pointerCounter);
 
-            if( segments > real_size  &&  Size != 0  ){
+                if(vacant){
+                    top = vacant;
+                }else{
+                    createDataPointer();
+                    top = queueHead;
+                }
 
-                segments -= real_size;
+            if( segments > realSize && Size != 0  ){
 
-                // сделаем еще две ссылки и прогоним в поисках идущих подряд незанятых блоков
-                Pool *ptr_first = PoolHead;
-                Pool *ptr_second = PoolHead;
-             //
-                int counter = 0, gen_counter = 0;
+                Pool *ptrFirst  = PoolHead;
+                Pool *ptrSecond = PoolHead;
 
-                // количество скачков через уже выделенную память
-                size_t seg_jump = 0;
+                int counter = 0, genCounter = 0;
+                bool segJump = false;
 
-                while(counter < real_size && ptr_first) //ищем верхнюю границу памяти
-                {
-                    if(ptr_first->next - ptr_first == 1)// проверка на наличие выделенных участков между блоками
+                while(counter < realSize && ptrFirst->next){
+                    if(ptrFirst->next - ptrFirst == 1)
                         ++counter;
-
-                    else//найден скачек - обнуление счетчика
+                    else
                         counter = 0;
+                    ptrFirst = ptrFirst->next;
+                    ++genCounter;
+                }
+                if(counter != genCounter)
+                    segJump = 1;
 
-                    ptr_first = ptr_first->next;
-                    ++gen_counter; // далее, считаем общее количество пройденных блоков
+                if(counter != realSize){
+                     defragmentation();
+                    //reset
+                     segJump = 0;
+                     ptrSecond = PoolHead;
+                     ptrFirst = ptrSecond + realSize;
                 }
 
-                // check fragmentation on the segment have been traversed
-                if(counter != gen_counter)
-                    seg_jump = 1;
-
-
-
-                if(counter == real_size)
-                {
-    //рассмотрим 2 случая: память сегментирована и - нет.
-    // используем 2 указателя на выделяемый отрезок памяти: начало и конец
-    //если память не сегментирована, то второй указатель так и остается в начале списка
-                    if(seg_jump){// если прыжок был, то нужно вырезать отрезок и объединить список
-                            // общее количество пройденных блоков
-                            // не равно количеству пройденных подряд не занятых блоков -> память сегментирована
-                        ///Назначить PoolHead, проверить корректность.
-                        for(int i = 0; i <= gen_counter-counter - 1; ++i)
-                            ptr_second = ptr_second->next;//run until the block before the first block
-                        queueHead[0] = (Type *)(ptr_second->next);//отдали первый блок
-                        ptr_second->next = ptr_first;//copy the one's after last block address to the "next" field.
-
-                    }else{
-
-                        // память пока не сегментирована или
-                        //выделяется один блок(может состоять из нескольких юнитов) в самом начале цепочки юнитов*/
-                       // (*((double*)ptr_second) = size;
-                        queueHead[0] = (Type *)ptr_second; // отдаем указатель на первый блок
-                        PoolHead = ptr_first; //назначаем головй списка следующий юнит за выделенным блоком
+                if(segJump){
+                    for(int i = 0; i <= genCounter - counter - 1; ++i)
+                        ptrSecond = ptrSecond->next;//run until the block before the first block
+                        top->accept(this, reinterpret_cast<PointerType *>(ptrSecond->next), Size/sizeof(PointerType));
+                        ptrSecond->next = ptrFirst;//copy the one's after last block address to the "next" field.
+                }else{
+                        top->accept(this, reinterpret_cast<PointerType *>(ptrSecond), Size/sizeof(PointerType));
+                        PoolHead = ptrFirst;
                     }
-
-                  *((double*)(ptr_first-1)) = size; // записываем в конец выделенного сегмента символ конца строки
-
-                }
-
-
-
-
           }
-
-          std::cout<< "Памяти осталось end"<<this->checkMemory()<<" байт. "<<std::endl;
-
-             return  queueHead[0];
+             return  *top;
 
      }
 
+template<class PointerType, class MemoryType> void PoolAllocator<PointerType, MemoryType>::createDataPointer(){
+    if(segments >= sizeof(DataPointer<PointerType>)/sizeof(Pool)){
+        DataPointer<PointerType> tmp;
+        --queueHead;
+        memmove(queueHead, &tmp, sizeof(tmp));
+        Pool* end = nullptr;
+        ++pointerCounter;
+        uint8_t reminder = (sizeof(tmp)*pointerCounter)%sizeof(Pool);
+        if(!reminder)
+            end = reinterpret_cast<Pool *>(queueHead) - 1;
+        else
+            end = reinterpret_cast<Pool *>(reinterpret_cast<char *>(queueHead) - reminder + sizeof(Pool));
+        end->next = NULL;
 
-template<class Type> bool  PoolAllocator<Type>::IncreasePointerVector(){
-
-    SharedPtr<Type> tmp;
-    --queueHead;
-
-    memmove(queueHead, &tmp, sizeof(tmp));
-    ++pointerCounter;
-
-     Pool* end = ((Pool *) queueHead) - 1;
-     end->next = NULL;
-
-     segments -= sizeof(SharedPtr<Type>)/sizeof(Pool);
-
-
+        segments -= sizeof(tmp)/sizeof(Pool);
+   }else{
+    throw std::bad_alloc();
+   }
 }
 
+ template<class PointerType, class MemoryType> inline size_t PoolAllocator<PointerType, MemoryType>::bytes(IPointers<PointerType>& pointer){
 
-      template<class Type> size_t PoolAllocator<Type>::bytes(Type * Pointer){
-
-            size_t i = 0;
-
-            for( char *ptr = (char*)Pointer;
-            ptr && *((double*)ptr) != size;
-            ++ptr)
-                ++i;
-
-            return i;
+            return pointer.size()*sizeof(PointerType);
         }
 
-    template<class Type>
-     SharedPtr<Type>&  PoolAllocator<Type>::ReAlloc(IPointers<Type>& pointer, size_t _size) {
+ template<class PointerType, class MemoryType>
+    void PoolAllocator<PointerType, MemoryType>::realloc(IPointers<PointerType>& pointer, size_t _size) {
 
-          //  std::cout<<"size = "<<size<<std::endl;
-            if(pointer == NULL) //<- будет срабатывать почти всегда, а как же данные?
-                return Alloc(_size);
-            else
-                if(_size == 0 && pointer != NULL){
-                    Free(pointer);
-                    return *(SharedPtr<Type>*)(memory + size);
-                }
+        if(pointer == NULL){
+            pointer = alloc(_size);
+            return;
+        }
+        else
+            if(_size == 0 && pointer != NULL){
+                free(pointer);
+                return;
+            }
 
+            IPointers<PointerType>& ptr = alloc(_size);
 
+            for(size_t i = 0; i < _size/sizeof(PointerType) && i < pointer.size(); ++i)
+                ptr[i] = pointer[i];
 
-                size_t oldSize = bytes(&pointer[0]);
-
-                SharedPtr<Type>& ptr = Alloc(_size);
-
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! проставить касты
-                for(size_t i = 0; i < _size && i < oldSize; ++i)
-                    ((char*)ptr)[i] = ((char*)pointer)[i];
-//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                Free(pointer);
-
-                return ptr;
+            free(pointer);
+            pointer = ptr;
 
         }
 
-    template<class Type> void PoolAllocator<Type>::Free(IPointers<Type>& Pointer) { //<-коснтантная ссылка?
-            // оствобождает всю память от Pointer и до первого незахваченного куска
-            std::cout<<"Free()"<<std::endl;
-            if(Pointer != NULL){
-
-                Pool* ptr = (Pool*)Pointer;// приводим указатель начало сегмента памяти к типу юнитов
-                Pool* ptr_end = NULL;// указатель на предыдущий unit
+    template<class PointerType, class MemoryType> void PoolAllocator<PointerType, MemoryType>::free(IPointers<PointerType>& pointer) {
+            if(pointer != NULL){
+                Pool* ptr = static_cast<Pool*>(pointer);
+                Pool* ptr_end = NULL;
 
                 Pool* start = PoolHead;
                 Pool PoolObject;
+                size_t blockSize = (bytes(pointer)%sizeof(Pool)) ?
+                  bytes(pointer)/sizeof(Pool) + 1 : bytes(pointer)/sizeof(Pool);
 
-                size_t blockSize = bytes(&Pointer[0]) + sizeof(Pool);
-                //short beg = 0;//для проверки выделен ли кусок в начале памяти или где-то посередине
-            // Pointer = NULL;
-
-                  for(unsigned i = 0 ; i < blockSize/sizeof(Pool); ++i)
+                  for(unsigned i = 0 ; i < blockSize; ++i)
                 {
                     memmove(ptr, &PoolObject, sizeof(PoolObject));
                     ptr_end = ptr++;
                     ptr_end->next = ptr;
-                    std::cout<<"i = "<<i<<std::endl;
                 }
-
-                if(PoolHead > (Pool*)Pointer)
+                if(PoolHead > static_cast<Pool*>(pointer))
                 {
                     ptr_end->next = PoolHead;
-                    PoolHead = (Pool*)Pointer;
+                    PoolHead = static_cast<Pool*>(pointer);
                 }else{
-                    // если не с первого, то ищем подходящий стартовый блок
-                    while(start && start->next < (Pool*)Pointer){///А ЕСЛИ ДО ЭТОГО БЛОКА ВЫДЕЛЕН ЕЩЕ ОДИН БЛОК?
-                        start = start->next;// присваиваем start адрес блока идущего перед Pointer
-                    }
+                    int i = 0;
+
+                    while(start && start->next < static_cast<Pool*>(pointer))
+                        start = start->next;
 
                     ptr_end->next = start->next;
-                    start->next = (Pool*)Pointer;
+                    start->next = static_cast<Pool*>(pointer);
                 }
-
-
-
+                pointer.reset();
+                segments += blockSize;
             }
-
-std::cout<<"-----end---Free()---"<<std::endl;
         }
 
-template<class Type> bool PoolAllocator<Type>::Defragmentation()const {
+template<class PointerType, class MemoryType> void PoolAllocator<PointerType, MemoryType>::defragmentation() {
+        IPointers<PointerType>* sortedPointers[pointerCounter];
+        for(int i = 0; i < pointerCounter; ++i)
+            sortedPointers[i] = queueHead + i;
 
+        SortPointers(sortedPointers, pointerCounter);
+        char *memoryPointer = memory;
+        unsigned count1 = 0;
+        for(unsigned i = 0; i < pointerCounter; ++i)
+        {
+           const PointerType *ptr = sortedPointers[i]->get();
+            if(ptr){
+            sortedPointers[i]->accept(this,reinterpret_cast<const PointerType *>(memoryPointer), sortedPointers[i]->size());
+            size_t blockSize = bytes(*sortedPointers[i]);
+            memmove(memoryPointer, ptr, blockSize);
+            memoryPointer += blockSize;
 
+            }
+        }
+
+        Pool poolObject;
+        Pool *poolPtr = reinterpret_cast<Pool*>(memoryPointer);
+        PoolHead = poolPtr;
+        while(poolPtr - reinterpret_cast<Pool*>(queueHead)){
+            memmove(poolPtr, &poolObject, sizeof(Pool));
+            ++poolPtr;
+            (poolPtr - 1)->next = poolPtr;
+        }
+        (poolPtr - 1)->next = NULL;
 }
 
 #endif // ALLOCATOR_HPP_INCLUDED

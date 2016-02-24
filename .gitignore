@@ -4,4 +4,6 @@ bin/*
 *.layout
 *.depend
 main.cpp
-
+*~
+doxygen/*
+*.out
