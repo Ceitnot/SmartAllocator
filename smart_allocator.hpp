@@ -28,7 +28,7 @@ private:
     char *memory;
     size_t size;
     IPointers<PointerType>*  peak;
-    PointerHeap<PointerType,const IPointers<PointerType>*, MemoryType > heap;
+    HeapOfPointers<PointerType,const IPointers<PointerType>*, MemoryType > heap;
     int rest;
     /// _size - number of elements of PointerType
     void createDataPointer();
@@ -59,7 +59,7 @@ template <class PointerType, class MemoryType>  SmartAllocator<PointerType, Memo
             DataPointer<PointerType> SmartObject;
 
             peak = reinterpret_cast< DataPointer<PointerType>* >(memory + size - sizeof(SmartObject));
-            PointerHeap<PointerType,const IPointers<PointerType>*, MemoryType >
+            HeapOfPointers<PointerType,const IPointers<PointerType>*, MemoryType >
                                         tempHeap(reinterpret_cast<const IPointers<PointerType>** >(peak) - 2);
             heap = tempHeap;
             memmove(peak, &SmartObject, sizeof(SmartObject));

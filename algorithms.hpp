@@ -30,34 +30,33 @@ template <class PointerType, class MemoryType>
     @{
 */
 template<class KeyType, class ElementType, class MemoryType>
-class PointerHeap{
+class HeapOfPointers{
 
     size_t       size;
     ElementType* elements;
 
 public:
-   PointerHeap()
+   HeapOfPointers()
     :size(0)
     ,elements(NULL)
     {}
-    PointerHeap(ElementType *_elements)
+    HeapOfPointers(ElementType *_elements)
     :size(0)
     ,elements(_elements)
     {}
 
-   PointerHeap(size_t _size, ElementType *_elements)
-    : size(0)
-    , elements(_elements)
+   HeapOfPointers(size_t _size, ElementType *_elements)
+    : size(_size)
     {
         for(int i = 0; i < _size; ++i){
             push(elements[i]);
         }
     }
 
-PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
+HeapOfPointers(const HeapOfPointers <KeyType, ElementType, MemoryType>& heap)
     {
         size = heap.size;
-        memcpy(elements, heap.elements);
+        memcpy(elements, heap.elements, size);
     }
 
     void push(ElementType element){
@@ -71,21 +70,26 @@ PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
             SiftDown(size - 1);
 
     }
-    void increaseSize(){
-         /**< increase size of keys array*/
-        ++size;
+    ~HeapOfPointers(){}
+     HeapOfPointers<KeyType, ElementType, MemoryType> & operator=(HeapOfPointers<KeyType
+                                                           , ElementType
+                                                           , MemoryType> & ptr)
+    {
+        elements = ptr.elements;
+        size = ptr.size;
+    }
+    const ElementType * operator&() const { return elements; }
+    size_t getSize() const { return size; }
+
+    ElementType operator[](size_t i) const {
+        if(i < size)
+            return elements[i];
+        else
+           return elements[i - size];
     }
 
-    int leftChild(size_t i){
-        int child = i*2 + 1;
-        return  (size > child) ? child : i;
-    }
-
-    int rightChild(size_t i){
-        int child = i*2 + 2;
-        return  (size > child) ? child : i;
-    }
     void SiftDown(size_t i = 0){
+
         if(size > i + 1){
             size_t child = 0;
             size_t indexOfLChild = leftChild(i);
@@ -113,7 +117,7 @@ PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
             }
         }
     }
-    void SiftUp(size_t i){
+    void SiftUp(size_t i = 0){
         size_t indexOfParent = parent(i);
 
         while(elements[indexOfParent]->get() > elements[i]->get()){
@@ -122,8 +126,51 @@ PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
             indexOfParent = parent(indexOfParent);
         }
     }
+    void sort()
+    {
+   int i, j;
+   ElementType key;
 
-    size_t getSize()const{ return size;}
+   for (i = 1; i < size; i++)
+   {
+       key = elements[i];
+       j = i-1;
+
+       /* Move elements of A[0..i-1], that are greater than key, to one
+          position ahead of their current position.
+          This loop will run at most k times */
+       while (j >= 0 && elements[j]->get() > key->get())
+       {
+           elements[j+1] = elements[j];
+           --j;
+       }
+       elements[j+1] = key;
+      }
+    }
+
+    void acceptLocationChange(const SmartAllocator<KeyType, MemoryType>* const allocator, const ElementType * newLocation)
+    {
+        assert(newLocation && newLocation < elements);
+        allocator->setHeap(elements, newLocation);
+    }
+
+protected:
+
+    void increaseSize(){
+         /**< increase size of keys array*/
+        ++size;
+    }
+
+    int leftChild(size_t i){
+        int child = i*2 + 1;
+        return  (size > child) ? child : i;
+    }
+
+    int rightChild(size_t i){
+        int child = i*2 + 2;
+        return  (size > child) ? child : i;
+    }
+
 
     void decrease(){ --size; }
 
@@ -146,36 +193,6 @@ PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
     else
         return 0;
 }
-//вынести из класса
-    void acceptLocationChange(const SmartAllocator<KeyType, MemoryType>* const allocator, const ElementType * newLocation)
-    {
-        assert(newLocation &&
-               newLocation < elements);
-        allocator->setHeap(elements, newLocation);
-    }
-
- void sort()
-{
-   int i, j;
-   ElementType key;
-
-   for (i = 1; i < size; i++)
-   {
-       key = elements[i];
-       j = i-1;
-
-       /* Move elements of A[0..i-1], that are greater than key, to one
-          position ahead of their current position.
-          This loop will run at most k times */
-       while (j >= 0 && elements[j]->get() > key->get())
-       {
-           elements[j+1] = elements[j];
-           j = j-1;
-       }
-       elements[j+1] = key;
-   }
-}
-
 
     size_t findIndex(KeyType* elem){
         size_t counter = 0;
@@ -184,64 +201,41 @@ PointerHeap(const PointerHeap <KeyType, ElementType, MemoryType>& heap)
                 counter = i;
 
     return counter;
-}
-
-void deleteObj(KeyType* key){
-    size_t tempKey = findIndex(key);
-    elements[tempKey] = elements[size-1];
-    SiftDown(tempKey);
-    decrease();
     }
 
-void changeMinKey(KeyType* newKey){
-    elements[0]->accept(*this, newKey);
-    SiftDown(0);
-}
+    void deleteObj(KeyType* key){
+        size_t tempKey = findIndex(key);
+        elements[tempKey] = elements[size-1];
+        SiftDown(tempKey);
+        decrease();
+    }
 
-void set(KeyType*& oldKey, const KeyType*& newKey)const{
-    oldKey = const_cast<KeyType*>(newKey);
-}
+    void changeMinKey(KeyType* newKey){
+        elements[0]->accept(*this, newKey);
+        SiftDown(0);
+    }
 
-void printHeap(){
-    for(int i = 1; i <=size; i*=2)
-    {
-        for(int t = 0; t < std::log2(size - i*2); ++t)
-            std::cout<<"\t";
-        for(int j = i - 1; (j < (i-1)*2+1)&&(j<size) ; ++j)
-            std::cout<<"("<<elements[j]->get()<<") \t\t";
+    void set(KeyType*& oldKey, const KeyType*& newKey)const{
+        oldKey = const_cast<KeyType*>(newKey);
+    }
 
+    void printHeap(){
+        for(int i = 1; i <=size; i*=2)
+        {
+            for(int t = 0; t < std::log2(size - i*2); ++t)
+                std::cout<<"\t";
+            for(int j = i - 1; (j < (i-1)*2+1)&&(j<size) ; ++j)
+                std::cout<<"("<<elements[j]->get()<<") \t\t";
+
+            std::cout<<std::endl;
+            std::cout<<std::endl;
+        }
+    }
+    void printHeap2(){
+        for(int i = 0; i < size; ++i)
+            std::cout<<elements[i]->get()<<" ";
         std::cout<<std::endl;
-        std::cout<<std::endl;
     }
-}
-void printHeap2(){
-    for(int i = 0; i < size; ++i)
-        std::cout<<elements[i]->get()<<" ";
-    std::cout<<std::endl;
-}
-
-    ~PointerHeap(){
-
-    }
-    ElementType operator[](size_t i) const {
-        if(i < size)
-            return elements[i];
-        else
-           return elements[i - size];
-    }
-
-
-    const ElementType * operator&(){ return elements; }
-
-
- PointerHeap<KeyType, ElementType, MemoryType> & operator=(PointerHeap<KeyType
-                                                           , ElementType
-                                                           , MemoryType> & ptr)
-{
-    elements = ptr.elements;
-    size = ptr.size;
-}
-
     bool isEmpty(){
         return (size > 0) ? false : true;
     }
