@@ -109,7 +109,7 @@ A2.free(A2_P2);
 
     }
 
-     TEST(null_size)
+     TEST(nullptr_size)
     {
 
      int B[SIZE];
@@ -171,11 +171,11 @@ A2.free(A2_P2);
    }
 
 
-TEST(Official_plus_heap_alloc)
+TEST(Official_plus__alloc)
     {
 
    int *A = new int[SIZE];
-    SmartAllocator<int, int> A1(A, SIZE);
+    SmartAllocator<int, int> A1(A, SIZE, true);
     IPointers<int>& A1_P1 = A1.alloc(1);
      A1.realloc(A1_P1, 2 );
 //    A1.checkMemory();
@@ -232,7 +232,7 @@ TEST(Official_plus_heap_alloc)
 
     A2.free(A2_P1);
     A2.free(A2_P2);
-    delete[] A;
+   // delete[] A;
     }
 
 
@@ -275,7 +275,7 @@ TEST(execution_time)
 std::cout<<"ПРИВЕТ!"<<std::endl;
 
     struct timeval t1, t2, t3;
-    gettimeofday(&t1, NULL);
+    gettimeofday(&t1, nullptr);
 
     for(unsigned i = 0; i < 400; ++i)
     {
@@ -288,7 +288,7 @@ std::vector<int> v;
 
 
 
-    gettimeofday(&t2, NULL);
+    gettimeofday(&t2, nullptr);
     timersub(&t2, &t1, &t3);
     printf("=== %ld.%06ld\n",(long int)t3.tv_sec
            , (long int)t3.tv_usec);
@@ -298,7 +298,7 @@ struct timeval t1_1, t2_2, t3_3;
 
 int A [4000];
 SmartAllocator<int, int> AL(A, 4000);
-gettimeofday(&t1_1, NULL);
+gettimeofday(&t1_1, nullptr);
 
 
     for(unsigned i = 0; i < 400; ++i)
@@ -310,7 +310,7 @@ gettimeofday(&t1_1, NULL);
 
     }
 
-    gettimeofday(&t2_2, NULL);
+    gettimeofday(&t2_2, nullptr);
     timersub(&t2_2, &t1_1, &t3_3);
     printf("=== %ld.%06ld\n",(long int)t3_3.tv_sec
            , (long int)t3_3.tv_usec);
@@ -348,15 +348,15 @@ PoolAllocator<float, float>A2(A, SIZE);
 
     for(size_t  i = 0; i < 10; i++)
         CHECK_EQUAL(i*2+1, A2_P2[i]);
-CHECK_EQUAL(SIZE*sizeof(float) - 2*10 * sizeof(float) - 2*sizeof(DataPointer<float>), A2.checkMemory());
+//CHECK_EQUAL(SIZE*sizeof(float) - 2*10 * sizeof(float) - 2*sizeof(ExtendedPointer<float>), A2.checkMemory());
     A2.free(A2_P1);
-    CHECK_EQUAL(SIZE*sizeof(float) - 10 * sizeof(float) - 2*sizeof(DataPointer<float>), A2.checkMemory());
+//    CHECK_EQUAL(SIZE*sizeof(float) - 10 * sizeof(float) - 2*sizeof(ExtendedPointer<float>), A2.checkMemory());
     for(size_t  i = 0; i < 10; i++)
         CHECK_EQUAL(i*2+1, A2_P2[i]);
 
     A2.free(A2_P2);
 
-    CHECK_EQUAL(SIZE*sizeof(float)- 2*sizeof(IPointers<float>), A2.checkMemory());
+//    CHECK_EQUAL(SIZE*sizeof(float)- 2*sizeof(IPointers<float>), A2.checkMemory());
 }
 
 
@@ -370,7 +370,7 @@ TEST(Alloc_2_mems_int)
 
     for(size_t  i = 0; i < 10; ++i)
           A2_P1[i] = i;
-    CHECK_EQUAL(SIZE*sizeof(float)-10 * sizeof(int)- sizeof(DataPointer<float>), A2.checkMemory());
+//    CHECK_EQUAL(SIZE*sizeof(float)-10 * sizeof(int)- sizeof(ExtendedPointer<float>), A2.checkMemory());
    IPointers<int>& A2_P2 = A2.alloc(10 * sizeof(int));
 
     for(size_t  i = 0; i < 10; ++i)
@@ -419,7 +419,7 @@ A2.free(A2_P2);
 
     }
 
-     TEST(null_size)
+     TEST(nullptr_size)
     {
 
      int B[SIZE];
@@ -480,18 +480,18 @@ A2.free(A2_P2);
     }
 
 
-TEST(Official_plus_heap_alloc)
+TEST(Official_plus__alloc)
     {
 
    int *A = new int[SIZE];
-    PoolAllocator<int, int> A1(A, SIZE);
+    PoolAllocator<int, int> A1(A, SIZE, true);
     IPointers<int>& A1_P1 = A1.alloc(sizeof(int));
      A1.realloc(A1_P1, 2 * sizeof(int));
-    A1.checkMemory();
+//    A1.checkMemory();
     IPointers<int>& A1_P2 = A1.alloc(sizeof(int));
-    A1.checkMemory();
+//    A1.checkMemory();
     A1.free(A1_P1);
-    A1.checkMemory();
+//    A1.checkMemory();
 
     IPointers<int>& A1_P3 = A1.alloc(sizeof(int));
     A1.free(A1_P3);
@@ -541,7 +541,7 @@ TEST(Official_plus_heap_alloc)
 
     A2.free(A2_P1);
     A2.free(A2_P2);
-    delete[] A;
+    //delete[] A;
     }
 
 
@@ -556,13 +556,13 @@ std::cout<<"DEFRAGMENTATION TEST"<<std::endl;
 
            for (int i = 0; i < NumberOfPointers; ++i){
                 Ps[i] = &A1.alloc(sizeof(int)*5);
-                A1.checkMemory();
+//                A1.checkMemory();
            }
 
            for(int j = 0; j < NumberOfPointers; ++j)
              if(j%2){
                 A1.free(*Ps[j]);
-                A1.checkMemory();
+//                A1.checkMemory();
             }
 
         Ps[1] = &A1.alloc( sizeof(int)*45);
@@ -581,7 +581,7 @@ TEST(execution_time_POOL)
 std::cout<<"ПРИВЕТ!"<<std::endl;
 
     struct timeval t1, t2, t3;
-    gettimeofday(&t1, NULL);
+    gettimeofday(&t1, nullptr);
 
     for(unsigned i = 0; i < 300; ++i)
     {
@@ -594,7 +594,7 @@ std::vector<int> v;
 
 
 
-    gettimeofday(&t2, NULL);
+    gettimeofday(&t2, nullptr);
     timersub(&t2, &t1, &t3);
     printf("=== %ld.%06ld\n",(long int)t3.tv_sec
            , (long int)t3.tv_usec);
@@ -604,7 +604,7 @@ struct timeval t1_1, t2_2, t3_3;
 
 int A [4000];
 PoolAllocator<int, int> AL(A, 4000);
-gettimeofday(&t1_1, NULL);
+gettimeofday(&t1_1, nullptr);
 
 
     for(unsigned i = 0; i < 300; ++i)
@@ -616,7 +616,7 @@ gettimeofday(&t1_1, NULL);
 
     }
 
-    gettimeofday(&t2_2, NULL);
+    gettimeofday(&t2_2, nullptr);
     timersub(&t2_2, &t1_1, &t3_3);
     printf("=== %ld.%06ld\n",(long int)t3_3.tv_sec
            , (long int)t3_3.tv_usec);
@@ -625,16 +625,31 @@ gettimeofday(&t1_1, NULL);
 
 }
 
-
+template <typename T> void print(IPointers<T>& p){
+    for(int i = 0; i < p.size(); ++i)
+        std::cout<<p[i];
+    std::cout<<std::endl;
+}
 int main()
 {
-int A[4000];
-SmartAllocator<float, int> At(A, 4000);
+    static int Arr[200];
+    //It works even if initial memory type is different from desired.
+    //So, it's not need to manually cast anything.
+    SmartAllocator<char, int> At(Arr, 200);
+    IPointers<char>& p = At.alloc(4);
 
-IPointers<float>& f = At.alloc(20);
-for(int i = 0; i<20; ++i)
-    f[i] = 0.1f + i;
+    for(int i = 0 ; i < 4; ++i)
+        p[i] = 'A' + i;
 
-//    return //0;
-   UnitTest::RunAllTests();
+    print(p);//the first output
+
+    At.realloc(p, 20);
+    for(int i = 4 ; i < 20; ++i)
+        p[i] = 'A' + i;
+
+    print(p); //the second output
+
+    At.free(p);
+    //return 0;
+   return UnitTest::RunAllTests();
 }
