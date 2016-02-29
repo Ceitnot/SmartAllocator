@@ -1,0 +1,53 @@
+/**
+\mainpage SmartAllocator v0.9.6 Documentation
+
+
+The description of the project features:
+
+	1. full control of allocation, reallocation and free memory routines;
+	2. reduсtion of memory access using system calls;
+	3. ability to safely divide the same manually allocated memory between different parts of project
+
+Simple use cases:
+
+   \code
+
+template <typename T> void print(IPointers<T>& p){
+    for(int i = 0; i < p.size(); ++i)
+        std::cout<<p[i];
+    std::cout<<std::endl;
+}
+int main()
+{
+    static int Arr[200];
+    //It works even if initial memory type is different from desired.
+    //So, it's not need to manually cast anything.
+    SmartAllocator<char, int> At(Arr, 200);
+    IPointers<char>& p = At.alloc(4);
+
+    for(int i = 0 ; i < 4; ++i)
+        p[i] = 'A' + i;
+
+    print(p);//the first output
+
+    At.realloc(p, 20);
+    for(int i = 4 ; i < 20; ++i)
+        p[i] = 'A' + i;
+
+    print(p); //the second output
+
+    At.free(p);
+    return 0;
+}
+
+
+   \endcode
+
+Output:
+   \code
+	ABCD
+	ABCDEFGHIJKLMNOPQRST
+   \endcode
+\warning For now these features aren't compatible with any containers that use dynamic memory (example: STL containers). So it's fair to say that these allocators are useful for very limited memory.
+\warning The running time of SmartAllocator are less than the running time of PoolAllocator at the moment, so if one doesn't need to specify the number of bytes to allocate then it's more efficient to use the first one.
+*/
