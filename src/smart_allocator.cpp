@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include"smart_allocator.hpp"
-
 template <class PointerType, class MemoryType>  SmartAllocator<PointerType, MemoryType>::SmartAllocator(MemoryType *block, size_t elements, bool heap)
                             :memory(reinterpret_cast<char*>(block))
                             ,size(elements*sizeof(MemoryType))

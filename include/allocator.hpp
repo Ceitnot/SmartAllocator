@@ -22,7 +22,7 @@ limitations under the License.
 #include<algorithm>
 #include<cstring>
 #include<iostream>
-
+#include <cstddef>
 template <class Type> class IPointers;
 template <class Type> class ExtendedPointer;
 template <class Type> class IMemoryAllocator;
