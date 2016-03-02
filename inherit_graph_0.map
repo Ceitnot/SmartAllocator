@@ -1,0 +1,5 @@
+<map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
+<area shape="rect" id="node1" href="$class_i_memory_allocator.html" title="IMemoryAllocator\&lt; Pointer\lType \&gt;" alt="" coords="6,38,183,79"/>
+<area shape="rect" id="node2" href="$class_pool_allocator.html" title="PoolAllocator\&lt; PointerType,\l MemoryType \&gt;" alt="" coords="237,5,422,46"/>
+<area shape="rect" id="node3" href="$class_smart_allocator.html" title="SmartAllocator\&lt; PointerType,\l MemoryType \&gt;" alt="" coords="232,70,427,111"/>
+</map>
