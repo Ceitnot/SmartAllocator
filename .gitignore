@@ -8,3 +8,4 @@ bin/*
 doxygen/*
 *.out
 *.save
+html/
